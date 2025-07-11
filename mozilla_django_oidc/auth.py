@@ -343,16 +343,7 @@ class OIDCAuthenticationBackend(ModelBackend):
 
     def store_tokens(self, access_token, id_token, refresh_token):
         """Store OIDC tokens."""
-        session = self.request.session
-
-        if self.get_settings("OIDC_STORE_ACCESS_TOKEN", False):
-            session["oidc_access_token"] = access_token
-
-        if self.get_settings("OIDC_STORE_ID_TOKEN", False):
-            session["oidc_id_token"] = id_token
-
-        if self.get_settings("OIDC_STORE_REFRESH_TOKEN", False):
-            session["oidc_refresh_token"] = refresh_token
+        return store_tokens(self.request.session, access_token, id_token, refresh_token)
 
     def get_or_create_user(self, access_token, id_token, payload):
         """Returns a User instance if 1 user is found. Creates a user if not found
