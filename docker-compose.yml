@@ -37,6 +37,7 @@ services:
       - testprovider
     command: >-
       bash -c "cd /integration_tests &&
+               pip install selenium==4.15.0 &&
                wait-for-it -t 60 -p 8080 -h testprovider &&
                wait-for-it -t 60 -p 8081 -h testrp &&
                python integration_tests.py"

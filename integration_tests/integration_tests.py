@@ -1,86 +1,165 @@
 import unittest
-
-from splinter import Browser
+import os
+from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
 class IntegrationTest(unittest.TestCase):
     def __init__(self, *args, **kwargs):
         super(IntegrationTest, self).__init__(*args, **kwargs)
 
-        self.webdriver = "firefox"
         self.account = {
             "username": "example_username",
             "password": "example_p@ssw0rd",
             "email": "example@example.com",
         }
 
+    def get_browser(self):
+        """Get a browser instance with proper configuration"""
+        options = Options()
+        options.add_argument("--headless")
+        options.add_argument("--no-sandbox")
+        options.add_argument("--disable-dev-shm-usage")
+
+        service = Service("/usr/bin/geckodriver")
+        return webdriver.Firefox(service=service, options=options)
+
     def setUp(self):
         """Create test account in `testprovider` instance"""
-        with Browser(self.webdriver, headless=True) as browser:
-            browser.visit("http://testprovider:8080/account/signup")
-            browser.find_by_css("#id_username").fill(self.account["username"])
-            browser.find_by_css("#id_password").fill(self.account["password"])
-            browser.find_by_css("#id_password_confirm").fill(self.account["password"])
-            browser.find_by_css("#id_email").fill(self.account["email"])
-            browser.find_by_css(".btn-primary").click()
+        driver = self.get_browser()
+        try:
+            driver.get("http://testprovider:8080/account/signup")
+
+            # Wait for elements to be present and fill them
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#id_username"))
+            )
+
+            driver.find_element(By.CSS_SELECTOR, "#id_username").send_keys(
+                self.account["username"]
+            )
+            driver.find_element(By.CSS_SELECTOR, "#id_password").send_keys(
+                self.account["password"]
+            )
+            driver.find_element(By.CSS_SELECTOR, "#id_password_confirm").send_keys(
+                self.account["password"]
+            )
+            driver.find_element(By.CSS_SELECTOR, "#id_email").send_keys(
+                self.account["email"]
+            )
+            driver.find_element(By.CSS_SELECTOR, ".btn-primary").click()
+        finally:
+            driver.quit()
 
     def tearDown(self):
         """Remove test account from `testprovider` instance"""
-        with Browser(self.webdriver, headless=True) as browser:
-            self.perform_login(browser)
-            browser.visit("http://testprovider:8080/account/delete")
-            browser.find_by_css(".btn-danger").click()
+        driver = self.get_browser()
+        try:
+            self.perform_login(driver)
+            driver.get("http://testprovider:8080/account/delete")
 
-    def perform_login(self, browser):
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".btn-danger"))
+            )
+            driver.find_element(By.CSS_SELECTOR, ".btn-danger").click()
+        finally:
+            driver.quit()
+
+    def perform_login(self, driver):
         """Perform login using webdriver"""
-        browser.visit("http://testrp:8081")
-        browser.find_by_css("div > a").click()
-        browser.find_by_css("#id_username").fill(self.account["username"])
-        browser.find_by_css("#id_password").fill(self.account["password"])
-        browser.find_by_css(".btn-primary").click()
+        driver.get("http://testrp:8081")
 
-    def perform_logout(self, browser):
+        # Wait for login link and click it
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "div > a"))
+        )
+        driver.find_element(By.CSS_SELECTOR, "div > a").click()
+
+        # Fill login form
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "#id_username"))
+        )
+        driver.find_element(By.CSS_SELECTOR, "#id_username").send_keys(
+            self.account["username"]
+        )
+        driver.find_element(By.CSS_SELECTOR, "#id_password").send_keys(
+            self.account["password"]
+        )
+        driver.find_element(By.CSS_SELECTOR, ".btn-primary").click()
+
+    def perform_logout(self, driver):
         """Perform logout using webdriver"""
-        browser.visit("http://testrp:8081")
-        browser.find_by_css('input[value="Logout"]').click()
+        driver.get("http://testrp:8081")
+
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'input[value="Logout"]'))
+        )
+        driver.find_element(By.CSS_SELECTOR, 'input[value="Logout"]').click()
 
     def test_login(self):
         """Test logging in `testrp` using OIDC"""
-        browser = Browser(self.webdriver, headless=True)
+        driver = self.get_browser()
+        try:
+            # Check that user is not logged in
+            driver.get("http://testrp:8081")
+            self.assertNotIn("Current user:", driver.page_source)
 
-        # Check that user is not logged in
-        browser.visit("http://testrp:8081")
-        self.assertTrue(browser.is_text_not_present("Current user:"))
+            # Perform login
+            self.perform_login(driver)
 
-        # Perform login
-        self.perform_login(browser)
+            # Accept scope
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="allow"]'))
+            )
+            driver.find_element(By.CSS_SELECTOR, 'input[name="allow"]').click()
 
-        # Accept scope
-        browser.find_by_css('input[name="allow"]').click()
-
-        # Check that user is now logged in
-        self.assertTrue(browser.is_text_present("Current user:"))
+            # Check that user is now logged in
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//*[contains(text(), 'Current user:')]")
+                )
+            )
+            self.assertIn("Current user:", driver.page_source)
+        finally:
+            driver.quit()
 
     def test_logout(self):
         """Test logout functionality of OIDC lib"""
-        browser = Browser(self.webdriver, headless=True)
+        driver = self.get_browser()
+        try:
+            # Check that user is not logged in
+            driver.get("http://testrp:8081")
+            self.assertNotIn("Current user:", driver.page_source)
 
-        # Check that user is not logged in
-        browser.visit("http://testrp:8081")
-        self.assertTrue(browser.is_text_not_present("Current user:"))
+            self.perform_login(driver)
 
-        self.perform_login(browser)
+            # Accept scope
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name="allow"]'))
+            )
+            driver.find_element(By.CSS_SELECTOR, 'input[name="allow"]').click()
 
-        # Accept scope
-        browser.find_by_css('input[name="allow"]').click()
+            # Check that user is now logged in
+            WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located(
+                    (By.XPATH, "//*[contains(text(), 'Current user:')]")
+                )
+            )
+            self.assertIn("Current user:", driver.page_source)
 
-        # Check that user is now logged in
-        self.assertTrue(browser.is_text_present("Current user:"))
+            self.perform_logout(driver)
 
-        self.perform_logout(browser)
-
-        # Check that user is now logged out
-        self.assertTrue(browser.is_text_not_present("Current user:"))
+            # Check that user is now logged out
+            WebDriverWait(driver, 10).until(
+                lambda d: "Current user:" not in d.page_source
+            )
+            self.assertNotIn("Current user:", driver.page_source)
+        finally:
+            driver.quit()
 
 
 if __name__ == "__main__":
