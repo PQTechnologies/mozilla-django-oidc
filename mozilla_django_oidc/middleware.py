@@ -3,7 +3,6 @@ import logging
 import time
 from re import Pattern as re_Pattern
 from urllib.parse import quote, urlencode
-
 from django.contrib import auth
 from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import reverse
@@ -17,18 +16,10 @@ from requests.auth import HTTPBasicAuth
 from mozilla_django_oidc.auth import OIDCAuthenticationBackend, store_tokens
 from mozilla_django_oidc.utils import (
     absolutify,
-    add_state_and_nonce_to_session,
+    add_state_and_verifier_and_nonce_to_session,
+    generate_code_challenge,
     import_from_settings,
 )
-
-from urllib.parse import quote, urlencode
-
-try:
-    # Python 3.7 or later
-    from re import Pattern as re_Pattern
-except ImportError:
-    # Python 3.6 or earlier
-    from re import _pattern_type as re_Pattern
 
 
 LOGGER = logging.getLogger(__name__)
@@ -197,7 +188,7 @@ class SessionRefresh(MiddlewareMixin):
 
         # Build the parameters as if we were doing a real auth handoff, except
         # we also include prompt=none.
-        auth_params = {
+        params = {
             "response_type": "code",
             "client_id": client_id,
             "redirect_uri": absolutify(
@@ -212,13 +203,42 @@ class SessionRefresh(MiddlewareMixin):
 
         if self.OIDC_USE_NONCE:
             nonce = get_random_string(self.OIDC_NONCE_SIZE)
-            auth_params.update({"nonce": nonce})
+            params.update({"nonce": nonce})
+
+        # Handle PKCE if enabled
+        if self.get_settings("OIDC_USE_PKCE", False):
+            code_verifier_length = self.get_settings("OIDC_PKCE_CODE_VERIFIER_SIZE", 64)
+            # Check that code_verifier_length is between the min and max length
+            # defined in https://datatracker.ietf.org/doc/html/rfc7636#section-4.1
+            if not (43 <= code_verifier_length <= 128):
+                raise ValueError("code_verifier_length must be between 43 and 128")
+
+            # Generate code_verifier and code_challenge pair
+            code_verifier = get_random_string(code_verifier_length)
+            code_challenge_method = self.get_settings(
+                "OIDC_PKCE_CODE_CHALLENGE_METHOD", "S256"
+            )
+            code_challenge = generate_code_challenge(
+                code_verifier, code_challenge_method
+            )
+
+            # Append code_challenge to authentication request parameters
+            params.update(
+                {
+                    "code_challenge": code_challenge,
+                    "code_challenge_method": code_challenge_method,
+                }
+            )
+        else:
+            code_verifier = None
 
         # Register the one-time parameters in the session
-        add_state_and_nonce_to_session(request, state, auth_params)
+        add_state_and_verifier_and_nonce_to_session(
+            request, state, params, code_verifier
+        )
         request.session["oidc_login_next"] = request.get_full_path()
 
-        query = urlencode(auth_params, quote_via=quote)
+        query = urlencode(params, quote_via=quote)
         return "{auth_url}?{query}".format(auth_url=auth_url, query=query)
 
 

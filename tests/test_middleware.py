@@ -1,10 +1,8 @@
 import json
 import re
 import time
+
 from urllib.parse import parse_qs
-
-from mock import Mock, patch
-
 from django.urls import path
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import AnonymousUser
@@ -14,7 +12,6 @@ from django.dispatch import receiver
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase, override_settings
 from django.test.client import ClientHandler
-from django.urls import path
 from unittest.mock import MagicMock, patch
 
 from mozilla_django_oidc.middleware import SessionRefresh, RefreshOIDCAccessToken
@@ -218,7 +215,7 @@ class SessionRefreshTokenMiddlewareTestCase(TestCase):
 class RefreshOIDCAccessTokenMiddlewareTestCase(TestCase):
     def setUp(self):
         self.factory = RequestFactory()
-        self.middleware = RefreshOIDCAccessToken()
+        self.middleware = RefreshOIDCAccessToken(MagicMock())
         self.user = User.objects.create_user("example_username")
 
     def test_anonymous(self):
@@ -542,7 +539,7 @@ class RefreshOIDCAccessTokenTestCase(TestCase):
     def test_refresh_token_forces_renewal(self, request_mock, mock_random_string):
         mock_random_string.return_value = "examplestring"
 
-        post_json_mock = Mock()
+        post_json_mock = MagicMock()
         post_json_mock.json.return_value = {
             "id_token": "id_token",
             "accesss_token": "access_token",
