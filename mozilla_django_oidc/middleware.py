@@ -10,6 +10,7 @@ from django.utils.crypto import get_random_string
 from django.utils.deprecation import MiddlewareMixin
 from django.utils.functional import cached_property
 from django.utils.module_loading import import_string
+from typing import override
 import requests
 from requests.auth import HTTPBasicAuth
 
@@ -36,9 +37,7 @@ class SessionRefresh(MiddlewareMixin):
     def __init__(self, get_response):
         super(SessionRefresh, self).__init__(get_response)
         self.OIDC_EXEMPT_URLS = self.get_settings("OIDC_EXEMPT_URLS", [])
-        self.OIDC_OP_AUTHORIZATION_ENDPOINT = self.get_settings(
-            "OIDC_OP_AUTHORIZATION_ENDPOINT"
-        )
+        self.OIDC_OP_AUTHORIZATION_ENDPOINT = self.get_settings("OIDC_OP_AUTHORIZATION_ENDPOINT")
         self.OIDC_RP_CLIENT_ID = self.get_settings("OIDC_RP_CLIENT_ID")
         self.OIDC_STATE_SIZE = self.get_settings("OIDC_STATE_SIZE", 32)
         self.OIDC_AUTHENTICATION_CALLBACK_URL = self.get_settings(
@@ -76,9 +75,7 @@ class SessionRefresh(MiddlewareMixin):
             ]
         )
 
-        return set(
-            [url if url.startswith("/") else reverse(url) for url in exempt_urls]
-        )
+        return set([url if url.startswith("/") else reverse(url) for url in exempt_urls])
 
     @cached_property
     def exempt_url_patterns(self):
@@ -191,9 +188,7 @@ class SessionRefresh(MiddlewareMixin):
         params = {
             "response_type": "code",
             "client_id": client_id,
-            "redirect_uri": absolutify(
-                request, reverse(self.OIDC_AUTHENTICATION_CALLBACK_URL)
-            ),
+            "redirect_uri": absolutify(request, reverse(self.OIDC_AUTHENTICATION_CALLBACK_URL)),
             "state": state,
             "scope": self.OIDC_RP_SCOPES,
             "prompt": "none",
@@ -215,12 +210,8 @@ class SessionRefresh(MiddlewareMixin):
 
             # Generate code_verifier and code_challenge pair
             code_verifier = get_random_string(code_verifier_length)
-            code_challenge_method = self.get_settings(
-                "OIDC_PKCE_CODE_CHALLENGE_METHOD", "S256"
-            )
-            code_challenge = generate_code_challenge(
-                code_verifier, code_challenge_method
-            )
+            code_challenge_method = self.get_settings("OIDC_PKCE_CODE_CHALLENGE_METHOD", "S256")
+            code_challenge = generate_code_challenge(code_verifier, code_challenge_method)
 
             # Append code_challenge to authentication request parameters
             params.update(
@@ -233,9 +224,7 @@ class SessionRefresh(MiddlewareMixin):
             code_verifier = None
 
         # Register the one-time parameters in the session
-        add_state_and_verifier_and_nonce_to_session(
-            request, state, params, code_verifier
-        )
+        add_state_and_verifier_and_nonce_to_session(request, state, params, code_verifier)
         request.session["oidc_login_next"] = request.get_full_path()
 
         query = urlencode(params, quote_via=quote)
@@ -248,6 +237,7 @@ class RefreshOIDCAccessToken(SessionRefresh):
     https://auth0.com/docs/tokens/refresh-token/current
     """
 
+    @override
     def process_request(self, request):
         if not self.is_expired(request):
             return
@@ -312,3 +302,11 @@ class RefreshOIDCAccessToken(SessionRefresh):
         access_token = token_info.get("access_token")
         refresh_token = token_info.get("refresh_token")
         store_tokens(request.session, access_token, id_token, refresh_token)
+
+        # Reset the token expiration
+        expiration_interval = self.get_settings(
+            "OIDC_RENEW_TOKEN_EXPIRY_SECONDS",
+            # Handle old configuration value
+            self.get_settings("OIDC_RENEW_ID_TOKEN_EXPIRY_SECONDS", 60 * 15),
+        )
+        request.session["oidc_token_expiration"] = time.time() + expiration_interval
