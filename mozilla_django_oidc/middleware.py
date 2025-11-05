@@ -160,19 +160,10 @@ class SessionRefresh(MiddlewareMixin):
         """
         default_response = None
         xhr_response_json = {"error": "the authentication session has expired"}
-        if prompt_reauth:
-            # The id_token has expired, so we have to re-authenticate silently.
-            refresh_url = self._prepare_reauthorization(request)
-            default_response = HttpResponseRedirect(refresh_url)
-            xhr_response_json["refresh_url"] = refresh_url
-
-        if request.headers.get("x-requested-with") == "XMLHttpRequest":
-            xhr_response = JsonResponse(xhr_response_json, status=403)
-            if "refresh_url" in xhr_response_json:
-                xhr_response["refresh_url"] = xhr_response_json["refresh_url"]
-            return xhr_response
-        else:
-            return default_response
+        # Always return a 403 Forbidden JSON Response
+        # This works around issues that redirection causes.
+        xhr_response = JsonResponse(xhr_response_json, status=403)
+        return xhr_response
 
     def _prepare_reauthorization(self, request):
         # Constructs a new authorization grant request to refresh the session.
