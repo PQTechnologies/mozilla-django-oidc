@@ -100,8 +100,12 @@ class OIDCAuthenticationCallbackView(View):
             # Code Verifier or None in the "code_verifier" field.
             state = request.GET.get("state")
             if state not in request.session["oidc_states"]:
-                msg = "OIDC callback state not found in session `oidc_states`!"
-                raise SuspiciousOperation(msg)
+                # Return a login failure and delete the session cookie instead of raising
+                # See https://github.com/mozilla/mozilla-django-oidc/issues/435 for more details about the
+                # crash that this works around.
+                response = self.login_failure()
+                response.delete_cookie("sessionid")
+                return response
 
             # Get the nonce and optional code verifier from the dictionary for further processing
             # and delete the entry to prevent replay attacks.
