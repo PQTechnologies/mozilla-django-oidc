@@ -123,14 +123,14 @@ class SessionRefresh(MiddlewareMixin):
 
     def is_expired(self, request):
         if not self.is_refreshable_url(request):
-            LOGGER.debug("request is not refreshable")
+            # LOGGER.debug("request is not refreshable")
             return False
 
         expiration = request.session.get("oidc_token_expiration", 0)
         now = time.time()
         if expiration > now:
             # The id_token is still valid, so we don't have to do anything.
-            LOGGER.debug("id token is still valid (%s > %s)", expiration, now)
+            # LOGGER.debug("id token is still valid (%s > %s)", expiration, now)
             return False
 
         return True
