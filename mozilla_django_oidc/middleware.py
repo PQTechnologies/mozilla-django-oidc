@@ -154,15 +154,15 @@ class SessionRefresh(MiddlewareMixin):
         in an XHR request. Make a special response for these kinds
         of requests.
 
-        The use of 403 Forbidden is to match the fact that this
+        The use of 401 is to match the fact that this
         middleware doesn't really want the user in if they don't
         refresh their session.
         """
         default_response = None
         xhr_response_json = {"error": "the authentication session has expired"}
-        # Always return a 403 Forbidden JSON Response
+        # Always return a 401 JSON Response
         # This works around issues that redirection causes.
-        xhr_response = JsonResponse(xhr_response_json, status=403)
+        xhr_response = JsonResponse(xhr_response_json, status=401)
         return xhr_response
 
     def _prepare_reauthorization(self, request):
