@@ -264,6 +264,8 @@ class RefreshOIDCAccessToken(SessionRefresh):
                 auth=req_auth,
                 data=token_payload,
                 verify=import_from_settings("OIDC_VERIFY_SSL", True),
+                timeout=self.get_settings("OIDC_TIMEOUT", None),
+                proxies=self.get_settings("OIDC_PROXY", None),
             )
             response.raise_for_status()
             token_info = response.json()
